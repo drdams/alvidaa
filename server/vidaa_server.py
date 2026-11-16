@@ -330,6 +330,7 @@ class TVBridge:
             (base + "ui_service/data/launchapp", 0),
             (base + "platform_service/data/tokenissuance", 0),
             (base + "platform_service/data/gettoken", 0),
+            (base + "hiservice/data/screenshot", 0),   # binary JPEG (Vidda projectors; see /api/screenshot)
             ("/remoteapp/mobile/broadcast/ui_service/state", 0),
         ])
         self.connected.set()
@@ -469,15 +470,22 @@ class TVBridge:
                         "signal": s.get("is_signal") == "1" or s.get("has_signal") == "1"})
         return out
 
-    def launch(self, name):
+    def launch(self, name, url=None):
         want = name.strip().lower()
         app = next((a for a in self.apps_list() if a.get("name", "").lower() == want), None)
         if app is None:
             app = next((a for a in self.apps_list() if want in a.get("name", "").lower()), None)
         if app is None:
             return {"ok": False, "error": f"app not found: {name}"}
-        self.call("ui_service", "launchapp", {k: app[k] for k in ("appId", "name", "url", "urlType", "storeType") if k in app})
-        return {"ok": True, "launched": app.get("name")}
+        payload = {k: app[k] for k in ("appId", "name", "url", "urlType", "storeType") if k in app}
+        if url:
+            # deep link into a web app: only an address on that app's own host
+            own = urllib.parse.urlparse((app.get("url") or "").strip()).hostname
+            if not own or urllib.parse.urlparse(url).hostname != own:
+                return {"ok": False, "error": f"deep link host not allowed for {app.get('name')}"}
+            payload["url"] = url
+        self.call("ui_service", "launchapp", payload)
+        return {"ok": True, "launched": app.get("name"), "deeplink": bool(url)}
 
     def source(self, sid):
         for s in self.sources_list():
@@ -646,6 +654,13 @@ class WS:
             self.wfile.write(header + data)
             self.wfile.flush()
 
+# ---------------------------------------------------------------- screenshots
+# Last /api/screenshot JPEG and when it was taken (the TV rate-limits the hiservice screenshot action).
+
+SHOT_LOCK = threading.Lock()
+SHOT = {"at": 0.0, "jpg": b""}
+
+
 # ---------------------------------------------------------------- HTTP server
 
 class Handler(SimpleHTTPRequestHandler):
@@ -725,11 +740,15 @@ class Handler(SimpleHTTPRequestHandler):
                 except ValueError:
                     continue
                 if m.get("t") == "launch":
-                    ws.send_text(json.dumps(self.bridge.launch(m.get("name", ""))))
+                    ws.send_text(json.dumps(self.bridge.launch(m.get("name", ""), m.get("url") or None)))
                 elif m.get("t") == "source":
                     ws.send_text(json.dumps(self.bridge.source(m.get("id", ""))))
                 elif m.get("t") == "install":
                     ws.send_text(json.dumps(self.bridge.register_launcher(m.get("url", ""))))
+                elif m.get("t") == "key" and m.get("key") in ("KEY_MENU",):
+                    # Free My TV's settings button: open VIDAA's own settings menu.
+                    self.bridge.call("remote_service", "sendkey", m["key"])
+                    ws.send_text(json.dumps({"ok": True, "key": m["key"]}))
             try:
                 self.bridge.listeners.remove(push)
             except ValueError:
@@ -760,6 +779,60 @@ class Handler(SimpleHTTPRequestHandler):
             self.wfile.write(body)
             return
 
+        if u.path == "/api/screenshot":
+            # The screen as a 1920x1080 JPEG: publish to hiservice_cmd/<client>/actions/screenshot, the answer is the
+            # raw JPEG on hiservice/data/screenshot (documented by sergvax/Vidda_remote_cn_node). The TV rate-limits
+            # (empty answers for minutes after ~8-10 quick shots): one real shot per 6 s, the last one otherwise.
+            with SHOT_LOCK:
+                if time.time() - SHOT["at"] > 6 or not SHOT["jpg"]:
+                    try:
+                        jpg = self.bridge.ask("hiservice_cmd", "screenshot", "", want=bytes, timeout=10)
+                        SHOT.update(at=time.time(), jpg=jpg)
+                    except TimeoutError:
+                        if not SHOT["jpg"]:
+                            return self._json({"ok": False, "error": "no screenshot (TV busy or rate-limited)"})
+                body = SHOT["jpg"]
+            self.send_response(200)
+            self.send_header("Content-Type", "image/jpeg")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if u.path == "/api/key":
+            # remote-control navigation only (to drive the home page for screenshots): no power, volume or input keys
+            k = q.get("k", "")
+            if k not in ("KEY_UP", "KEY_DOWN", "KEY_LEFT", "KEY_RIGHT", "KEY_OK", "KEY_RETURNS", "KEY_HOME"):
+                return self._json({"ok": False, "error": "key not allowed"})
+            self.bridge.call("remote_service", "sendkey", k)
+            return self._json({"ok": True, "key": k})
+        if u.path == "/api/feed":
+            import feeds  # Free My TV rows per app (server/feeds.py); TMDB key stays server-side
+            return self._json(feeds.feed(q.get("app", "")))
+        if u.path == "/api/tv":
+            import tvguide  # Free My TV "Direct TV": TNT + Canal+ now/next/tonight
+            return self._json(tvguide.guide())
+        if u.path == "/api/history":
+            import tvguide
+            return self._json(tvguide.history())
+        if u.path.startswith("/img/m6/") and u.path.endswith(".jpg"):
+            import feeds  # M6+ pictures, shrunk and cached on the Pi (the originals are ~800 KB to 19 MB)
+            path = feeds.m6_image(u.path[len("/img/m6/"):-len(".jpg")])
+            if not path:
+                self.send_error(404)
+                return
+            with open(path, "rb") as f:
+                body = f.read()
+            self.send_response(200)
+            self.send_header("Content-Type", "image/jpeg")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "max-age=604800")
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if u.path == "/api/applist":
+            # read-only: the TV's raw app registry (appId, url, urlType, storeType...), for deep-link work
+            return self._json({"ok": True, "apps": self.bridge.ask("ui_service", "applist") or []})
         if u.path == "/api/state":
             return self._json({"ok": True, "state": (self.bridge.state or {}).get("statetype")})
         if u.path == "/api/launch":
@@ -808,6 +881,14 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         u = urllib.parse.urlparse(self.path)
+        if u.path == "/api/history":
+            import tvguide  # Free My TV "Reprendre": what was opened from the home screen
+            n = min(int(self.headers.get("Content-Length") or 0), 65536)
+            try:
+                item = json.loads((self.rfile.read(n) if n else b"{}").decode("utf-8"))
+            except (ValueError, UnicodeDecodeError):
+                item = None
+            return self._json(tvguide.add_history(item))
         if u.path == "/api/probe":
             n = int(self.headers.get("Content-Length") or 0)
             raw = self.rfile.read(n) if n else b"{}"
