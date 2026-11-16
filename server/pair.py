@@ -38,6 +38,28 @@ CLIENT_ID_PATTERN = "38D65DC30F45109A369A86FCE866A85B"
 MODERN_SALT = "h!i@s#$v%i^d&a*a"
 STANDARD_SALT = "h*i&s%e!r^v0i1c9"
 XOR_MASK = 6239759785777146216
+# Brand token in the client identity + credential hashes: Hisense = "his",
+# Toshiba OEM = "tos" (50C350LS), Vidda projectors = "evv" (M2 Pro). A wrong
+# brand gives rc=135 on all four profiles, exactly like a wrong MAC. Set
+# VIDAA_BRAND to force it; otherwise pair() reads brand= from the TV's UPnP
+# descriptor (modelDescription), as pyvidaa does, and falls back to "his".
+BRAND = os.environ.get("VIDAA_BRAND", "")
+
+
+def discover_brand(host):
+    """brand= from http://<tv>:<18400|38400>/MediaServer/rendererdevicedesc.xml, or None."""
+    import re
+    import urllib.request
+    for port in (18400, 38400):
+        try:
+            url = f"http://{host}:{port}/MediaServer/rendererdevicedesc.xml"
+            with urllib.request.urlopen(url, timeout=3) as r:
+                m = re.search(r"\bbrand=([a-z]{2,6})\b", r.read().decode("utf-8", "replace"))
+            if m:
+                return m.group(1)
+        except Exception:
+            continue
+    return None
 TV_MAC = os.environ.get("TV_MAC", "")  # TV WiFi MAC — from its SSDP descriptor (see docs/models/50A51HUV/09.01O.P0813/findings/01-mqtt-bridge.md)
 
 
@@ -55,17 +77,17 @@ def creds(profile, mac=None):
         mac = mac.upper()
     ts = int(time.time())
     digest = hashlib.md5(f"{CLIENT_ID_PATTERN}${mac}".encode()).hexdigest().upper()
-    client_id = f"{mac}$his${digest[:6]}_vidaacommon_001"
+    client_id = f"{mac}${BRAND}${digest[:6]}_vidaacommon_001"
     if profile == "legacy":
         return client_id, "hisenseservice", "multimqttservice"
     if profile == "modern":
-        salt, username = MODERN_SALT, f"his${ts ^ XOR_MASK}"
+        salt, username = MODERN_SALT, f"{BRAND}${ts ^ XOR_MASK}"
     elif profile == "middle":
-        salt, username = STANDARD_SALT, f"his${ts ^ XOR_MASK}"
+        salt, username = STANDARD_SALT, f"{BRAND}${ts ^ XOR_MASK}"
     else:  # standard / remotenow
-        salt, username = STANDARD_SALT, f"his${ts}"
+        salt, username = STANDARD_SALT, f"{BRAND}${ts}"
     digit_sum = sum(int(c) for c in str(ts)) % 10
-    salt_hash = hashlib.md5(f"his{digit_sum}{salt}".encode()).hexdigest().upper()
+    salt_hash = hashlib.md5(f"{BRAND}{digit_sum}{salt}".encode()).hexdigest().upper()
     password = hashlib.md5(f"{ts}${salt_hash[:6]}".encode()).hexdigest().upper()
     return client_id, username, password
 
@@ -158,7 +180,10 @@ def pair(host=None, pin_arg=None):
         sys.exit("usage: pair.py <tv-ip> [pin]   (or set HISENSE_HOST)")
     pin_arg = pin_arg if pin_arg is not None else PIN_ARG
 
-    print(f"TV: {host}, cert: {'vidaa (2024)' if 'vidaa_cert' in str(cert_paths()) else 'RemoteNOW (2018)'}")
+    global BRAND
+    if not BRAND:
+        BRAND = discover_brand(host) or "his"
+    print(f"TV: {host}, cert: {'vidaa (2024)' if 'vidaa_cert' in str(cert_paths()) else 'RemoteNOW (2018)'}, brand: {BRAND}")
     tokens = None
     active_mac = TV_MAC
     for profile in PROFILES:
