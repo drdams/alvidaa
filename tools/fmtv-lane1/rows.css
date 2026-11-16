@@ -1,0 +1,121 @@
+
+/* MARK: - fmtv-vidaa: tabs per app + Direct TV + Reprendre, one large row centred on the focused tile, info sheet */
+
+/* The fixed tabs (Direct TV, Reprendre) after a thin separator. */
+.tab:not(.fixed) + .tab.fixed { margin-left: 46px; position: relative; }
+.tab:not(.fixed) + .tab.fixed::before {
+  content: ''; position: absolute; left: -26px; top: 22px; width: 2px; height: 26px; background: rgba(0, 0, 0, 0.16);
+}
+.night .tab:not(.fixed) + .tab.fixed::before { background: rgba(255, 255, 255, 0.2); }
+
+.strip {
+  position: absolute;
+  left: 0;
+  height: 440px;
+  -webkit-transition: -webkit-transform 0.32s cubic-bezier(0.2, 0.9, 0.3, 1);
+  transition: transform 0.32s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.pick {
+  position: absolute;
+  top: 0;
+  -webkit-transition: -webkit-transform 0.24s cubic-bezier(0.2, 0.9, 0.3, 1.15), opacity 0.24s;
+  transition: transform 0.24s cubic-bezier(0.2, 0.9, 0.3, 1.15), opacity 0.24s;
+}
+.pick.side { opacity: 0.55; -webkit-transform: scale(0.92); transform: scale(0.92); }
+.pick .img {
+  position: relative;
+  width: 100%;
+  border-radius: 20px;
+  overflow: hidden;
+  background-color: #DADADF;
+  background-size: cover;
+  background-position: center;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.16);
+  -webkit-transition: box-shadow 0.22s;
+  transition: box-shadow 0.22s;
+}
+.pick .img::after {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; right: 0; bottom: 0;
+  border-radius: 20px;
+  box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.85);
+  background: linear-gradient(150deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0) 55%);
+  opacity: 0;
+  -webkit-transition: opacity 0.17s;
+  transition: opacity 0.17s;
+}
+.pick.focus { -webkit-transform: translateY(-6px) scale(1.06); transform: translateY(-6px) scale(1.06); z-index: 2; }
+.pick.focus .img { box-shadow: 0 26px 50px rgba(0, 0, 0, 0.36); }
+.pick.focus .img::after { opacity: 1; }
+.pick .name, .pick .meta {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+}
+.pick .name { font-size: 31px; font-weight: 600; color: #1D1D1F; }
+.pick .meta { font-size: 23px; font-weight: 500; color: #6E6E73; }
+.night .pick .img { background-color: #2C2C2E; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.34); }
+.night .pick .name { color: #F5F5F7; }
+.night .pick .meta { color: rgba(245, 245, 247, 0.62); }
+
+/* Direct TV: the channel's logo on the picture, and how far the programme has gone. */
+.pick .chlogo {
+  position: absolute; left: 16px; top: 14px; height: 46px; max-width: 120px;
+  padding: 6px 10px; border-radius: 12px; background: rgba(255, 255, 255, 0.88);
+}
+.progress { position: absolute; left: 0; right: 0; bottom: 0; height: 8px; background: rgba(0, 0, 0, 0.35); }
+.progress .bar { height: 100%; width: 0; background: #FF3B30; }
+
+/* The focused tile's summary (or Direct TV's next and tonight), centred under the row. */
+.blurb {
+  position: absolute;
+  left: 260px;
+  width: 1400px;
+  top: 718px;
+  max-height: 70px;
+  overflow: hidden;
+  text-align: center;
+  font-size: 24px;
+  line-height: 34px;
+  font-weight: 500;
+  color: #3A3A3C;
+  white-space: pre-line;
+}
+.night .blurb { color: rgba(245, 245, 247, 0.8); }
+.empty { position: absolute; left: 0; width: 1920px; top: 430px; text-align: center; font-size: 30px; font-weight: 500; color: #6E6E73; }
+.night .empty { color: rgba(245, 245, 247, 0.6); }
+
+/* The info sheet: the picture across the top, the text and the button over its fade. */
+#info { background: #0B0B0D; color: #F5F5F7; }
+#info .art { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; background-size: cover; background-position: center top; }
+#info .fade {
+  position: absolute; left: 0; top: 0; width: 1920px; height: 1080px;
+  background: linear-gradient(90deg, rgba(11, 11, 13, 0.94) 0%, rgba(11, 11, 13, 0.82) 38%, rgba(11, 11, 13, 0.1) 75%);
+}
+#info .box { position: absolute; left: 110px; top: 250px; width: 900px; }
+#info .chlogo { height: 64px; margin-bottom: 24px; padding: 8px 14px; border-radius: 14px; background: rgba(255, 255, 255, 0.9); }
+#info .name { font-size: 64px; font-weight: 700; line-height: 1.1; }
+#info .meta { margin-top: 22px; font-size: 27px; font-weight: 500; color: rgba(245, 245, 247, 0.7); }
+#info .progress { position: relative; margin-top: 20px; width: 520px; height: 8px; border-radius: 4px; overflow: hidden; background: rgba(255, 255, 255, 0.2); }
+#info .text { margin-top: 30px; max-height: 320px; overflow: hidden; font-size: 27px; line-height: 40px; color: rgba(245, 245, 247, 0.88); white-space: pre-line; }
+#info .go {
+  display: inline-block;
+  margin-top: 44px;
+  padding: 0 40px 0 32px;
+  height: 76px;
+  line-height: 76px;
+  border-radius: 38px;
+  background: #F5F5F7;
+  color: #1D1D1F;
+  font-size: 29px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.4);
+}
+#info .go .sym { display: inline-block; width: 30px; height: 30px; margin-right: 16px; vertical-align: -5px; background: #1D1D1F; }

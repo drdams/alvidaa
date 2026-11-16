@@ -1,0 +1,13 @@
+{
+  "tmdbRegion": "FR",
+  "latitude": "48.8566",
+  "longitude": "2.3522",
+  "city": "Paris",
+  "language": "fr",
+  "currency": "EUR",
+  "temperature": "C",
+  "showCrypto": false,
+  "hideAnimation": false,
+  "hideApps": ["Ads Privacy", "E-Manual", "On Demand"],
+  "shelfApps": ["CANAL+", "france.tv", "TF1+", "M6+", "ARTE", "YouTube", "Prime Video"]
+}

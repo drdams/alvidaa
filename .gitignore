@@ -46,3 +46,9 @@ tools/audio/dist/
 launcher/pub/installer.ipk
 launcher/pub/*.ipk
 /pub/
+
+# Free My TV lane-1 port (tools/fmtv-lane1): build output, local config, bridge caches
+launcher/fmtv/
+tools/fmtv-lane1/config.json
+tools/fmtv-lane1/rugby.*
+server/cache/
